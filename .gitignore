@@ -1,0 +1,11 @@
+# Segredos: nunca commitar o .env real (use .env.example como modelo)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Banco SQLite de desenvolvimento local
+*.db

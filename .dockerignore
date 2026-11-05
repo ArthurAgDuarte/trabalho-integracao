@@ -1,0 +1,12 @@
+# Só o necessário para compilar a API entra no contexto do build.
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+tests
+tools
+mosquitto
+*.md
+docker-compose.yml

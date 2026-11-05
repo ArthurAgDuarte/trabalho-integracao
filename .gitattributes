@@ -1,0 +1,7 @@
+# Arquivos que rodam dentro dos containers Linux precisam de LF: um clone no
+# Windows com core.autocrlf=true trocaria por CRLF e quebraria o entrypoint
+# ("set: illegal option -" / "\r: not found").
+* text=auto
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf

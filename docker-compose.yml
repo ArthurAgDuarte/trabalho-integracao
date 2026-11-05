@@ -1,0 +1,70 @@
+# Sistema de Detecção e Alerta de Vazamento de Gás: broker MQTT + banco + API.
+#
+#   cp .env.example .env        (troque as senhas)
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# O ESP32 conecta em <IP desta máquina>:1883; a API fica em http://<IP>:8000/docs.
+
+name: deteccao-gas
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    # Entrypoint próprio: gera o arquivo de senhas a partir do .env a cada start.
+    # Chamado via sh porque um bind mount vindo do Windows pode perder o bit de execução.
+    entrypoint: ["/bin/sh", "/entrypoint-gas.sh"]
+    environment:
+      MQTT_USER: ${MQTT_USER:?defina MQTT_USER no .env}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?defina MQTT_PASSWORD no .env}
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/entrypoint.sh:/entrypoint-gas.sh:ro
+      - mosquitto-dados:/mosquitto/data
+    ports:
+      - "1883:1883"
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB no .env}
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+    # Sem porta publicada: só a API (rede interna do compose) acessa o banco.
+    healthcheck:
+      # -h 127.0.0.1 testa por TCP: durante a inicialização do volume, o postgres
+      # sobe um servidor temporário só no socket local, que não serve para a API.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # A imagem slim não tem curl: usa o fetch do próprio Node. 503 (banco ou MQTT fora) = unhealthy.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Tempo para desconectar do MQTT, esvaziar a fila de notificações e fechar o banco.
+    stop_grace_period: 30s
+
+volumes:
+  mosquitto-dados:
+  postgres-dados:

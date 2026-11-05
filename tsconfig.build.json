@@ -1,0 +1,11 @@
+{
+  // Compila só o código da API para dist/ (é o que vai para a imagem Docker).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": true
+  },
+  "include": ["src"]
+}

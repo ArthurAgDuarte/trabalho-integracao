@@ -1,0 +1,17 @@
+# Segredos: nunca commitar o .env real (use .env.example como modelo)
+.env
+.env.*
+!.env.example
+
+# Node / build
+node_modules/
+dist/
+coverage/
+*.log
+
+# Arquivos de senha do Mosquitto: no Docker são gerados pelo entrypoint dentro do
+# container; rodando local (pasta mosquitto-local/), ficam fora do git do mesmo jeito.
+passwd
+*.passwd
+mosquitto/data/
+mosquitto-local/

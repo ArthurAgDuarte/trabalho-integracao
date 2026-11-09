@@ -22,7 +22,7 @@ O servidor pode rodar em dois lugares. Escolha um na seção 0 e siga só a part
 4. [Montar o circuito](#4-montar-o-circuito)
 5. [Firmware](#5-firmware)
 6. [Gravar e acompanhar no Serial Monitor](#6-gravar-e-acompanhar-no-serial-monitor)
-7. [Calibrar o limiar](#7-calibrar-o-limiar)
+7. [Calibrar o limite](#7-calibrar-o-limite)
 8. [Roteiro de testes](#8-roteiro-de-testes)
 9. [Problemas comuns](#9-problemas-comuns)
 10. [O que enviar no final](#10-o-que-enviar-no-final)
@@ -55,10 +55,10 @@ O ESP32 precisa estar **na mesma rede Wi-Fi** que o computador do servidor, porq
 |---|---|
 | Placa **ESP32** (ex.: ESP32 DevKit V1) | Um Arduino Uno ou Nano comum **não serve**: não tem Wi-Fi. |
 | Cabo USB **de dados** | Cabo só de carga não aparece como porta COM. |
-| Módulo sensor **MQ-2** ou **MQ-5** | O módulo com 4 pinos: VCC, GND, DO e AO. Só o AO é usado. |
-| 1 resistor de **10 kΩ** e 1 de **20 kΩ** | Divisor de tensão da saída do sensor. **Obrigatório** (seção 4). Sem resistor de 20 kΩ, use dois de 10 kΩ em série. |
-| Buzzer **ativo** de 3,3 V ou 5 V | O ativo apita só com tensão. Se for passivo, veja a observação na seção 5. |
-| LED + resistor de **220 Ω** a **330 Ω** | |
+| Módulo sensor **MQ-5** | O módulo com 4 pinos: VCC, GND, DO e AO. Só o AO é usado. |
+| 1 resistor de **10 kΩ** e 1 de **20 kΩ** | Divisor de tensão da saída do sensor (seção 4). Sem resistor de 20 kΩ, use dois de 10 kΩ em série. |
+| LED + resistor de **220 Ω** a **330 Ω** | É o aviso local de vazamento. |
+| Buzzer (aviso sonoro) | **Opcional, ainda não faz parte da montagem.** O firmware já está preparado para ele (seção 5). |
 | Protoboard e jumpers | |
 | Isqueiro | Só para **soltar o gás sem acender** na calibração. |
 
@@ -314,14 +314,25 @@ O esperado é `TcpTestSucceeded : True`. Rodar esse comando no próprio PC do se
 | Sensor **GND** | ESP32 **GND** | |
 | Sensor **AO** | divisor de tensão → ESP32 **GPIO 34** | veja abaixo; **nunca** ligue o AO direto |
 | Sensor **DO** | (não ligar) | |
-| Buzzer **+** | ESP32 **GPIO 25** | |
-| Buzzer **−** | ESP32 **GND** | |
-| LED **ânodo** (perna longa) | resistor 220 Ω → ESP32 **GPIO 26** | |
+| LED **ânodo** (perna longa) | resistor 220 Ω → ESP32 **GPIO 23** | |
 | LED **cátodo** (perna curta) | ESP32 **GND** | |
+| Buzzer (opcional, futuro) | **+** num GPIO livre (ex.: 25), **−** no GND | ainda não montado |
 
-### Divisor de tensão (obrigatório)
+**Por que o GPIO 34?** Ele é do **ADC1** (pinos 32 a 39). Os pinos do ADC2 não funcionam enquanto o Wi-Fi está ligado.
 
-A saída AO do sensor pode chegar a 5 V, e o pino do ESP32 aguenta no máximo 3,3 V. Sem o divisor, **o pino queima**.
+### Divisor de tensão: confira se existe
+
+O módulo MQ-5 é alimentado com 5 V, e com bastante gás a saída AO pode subir acima de 3,3 V. O pino do ESP32 é feito para no máximo 3,3 V: **acima disso, ele pode ser danificado**. Em ar limpo a tensão é baixa (por isso as leituras de 112 a 128 não dizem nada sobre o divisor). O risco aparece justamente nos testes com gás.
+
+**Como saber se a montagem atual tem o divisor:**
+
+1. **Olhe o fio que sai do pino AO do sensor.**
+   - Se ele vai **direto** para o GPIO 34 (um jumper só, sem resistores no caminho), **não há divisor**.
+   - Se ele passa por um resistor até o GPIO 34, e desse ponto sai outro resistor para o GND (como no desenho abaixo), **há divisor**.
+2. **Com multímetro (opcional):** meça a tensão entre o AO e o GND enquanto solta gás do isqueiro apagado. Se passar de 3,3 V, o divisor é necessário.
+3. **Pelo Serial:** se, com gás, a leitura chega a **4095** (o máximo), a tensão no pino chegou ao limite de medição do ESP32 e provavelmente passou de 3,3 V.
+
+**Se não houver divisor, monte assim** (com o USB desconectado):
 
 ```
 Sensor AO ──[ 10 kΩ ]──┬──► GPIO 34
@@ -333,21 +344,24 @@ Sensor AO ──[ 10 kΩ ]──┬──► GPIO 34
 
 Com 5 V na saída do sensor, chegam ~3,3 V no GPIO 34. Sem resistor de 20 kΩ, use dois de 10 kΩ em série no lugar dele.
 
-**Por que o GPIO 34?** Ele é do **ADC1** (pinos 32 a 39). Os pinos do ADC2 não funcionam enquanto o Wi-Fi está ligado.
+> ⚠️ **O divisor muda as leituras.** Todos os valores caem para cerca de 2/3: o ar limpo passa de ~112–128 para ~75–85, e o vazamento que antes passava de 900 passa a ficar por volta de 600. **Depois de montar o divisor, refaça a calibração** (seção 7) antes dos testes; com o `LIMITE` em 900, o alarme pode deixar de disparar.
 
 ### Antes de ligar o USB
 
-- [ ] o AO do sensor **não** está ligado direto no ESP32;
+- [ ] o AO do sensor passa pelo divisor (ou você anotou que ainda não há divisor, para informar no relatório);
 - [ ] todos os GND estão ligados entre si;
-- [ ] o LED está com o resistor e na posição certa (perna longa no GPIO 26).
+- [ ] o LED está com o resistor e na posição certa (perna longa no GPIO 23).
 
 ---
 
 ## 5. Firmware
 
-1. No Arduino IDE: **File → New Sketch**.
-2. Apague o conteúdo, cole o código abaixo e salve como `esp32_gas`.
-3. Troque os valores marcados com `TROCAR` no topo:
+Este código **substitui o sketch que já funciona na placa**. Ele mantém os mesmos pinos (MQ-5 no P34, LED no P23), o mesmo `LIMITE` (900), a mesma `MARGEM` (15) e a mesma lógica de alerta. A diferença é que acrescenta o Wi-Fi e o envio das leituras ao servidor via MQTT.
+
+1. **Guarde o sketch atual** (File → Save As, com outro nome) para poder voltar a ele se precisar.
+2. No Arduino IDE: **File → New Sketch**.
+3. Apague o conteúdo, cole o código abaixo e salve como `esp32_gas`.
+4. Troque os valores marcados com `TROCAR` no topo:
    - `WIFI_SSID` e `WIFI_SENHA`: a rede 2,4 GHz onde o PC do servidor está;
    - `MQTT_HOST`: o IP anotado no passo A.5;
    - `MQTT_SENHA`: a `MQTT_PASSWORD` do `.env` do servidor.
@@ -369,22 +383,25 @@ const char* MQTT_SENHA    = "senha-do-env";      // TROCAR: MQTT_PASSWORD do .en
 const char* DISPOSITIVO   = "esp32-cozinha";     // único por placa
 const char* TOPICO        = "casa/cozinha/gas";  // casa/<comodo>/gas
 
-const int PINO_SENSOR = 34;   // ADC1 (32 a 39): o ADC2 não funciona com o Wi-Fi ligado
-const int PINO_BUZZER = 25;
-const int PINO_LED    = 26;
+const int MQ5_PIN    = 34;   // P34: leitura do MQ-5 (ADC1, 32 a 39: o ADC2 não funciona com o Wi-Fi ligado)
+const int LED_PIN    = 23;   // P23: LED externo
+const int BUZZER_PIN = -1;   // sem buzzer por enquanto; quando montar, coloque o pino (ex.: 25)
 
-const int LIMIAR    = 600;    // calibrar (seção 7 do guia)
-const int HISTERESE = 50;     // evita o alarme "piscar" perto do limiar
+// Calibração com o isqueiro apagado: em ar limpo, leituras entre 112 e 128;
+// com gás, passam de 900. Se montar o divisor de tensão, recalibre (seção 7 do guia).
+const int LIMITE = 900;      // acima disto: ALERTA (status VAZAMENTO)
+const int MARGEM = 15;       // volta ao NORMAL só abaixo de LIMITE - MARGEM (evita pisca-pisca)
 
-const unsigned long AQUECIMENTO_MS      = 60000;  // 1 min sem alarme nem envio: o sensor ainda está aquecendo
-const unsigned long INTERVALO_ENVIO_MS  = 2000;   // publica a cada 2 s (e na hora, se o status mudar)
-const unsigned long INTERVALO_SERIAL_MS = 1000;   // imprime no Serial Monitor a cada 1 s
+const unsigned long AQUECIMENTO_MS     = 60000;  // 1 min sem alerta nem envio: o aquecedor do MQ-5 estabilizando
+const unsigned long INTERVALO_ENVIO_MS = 2000;   // publica a cada 2 s (e na hora, se o status mudar)
+const unsigned long INTERVALO_LOOP_MS  = 500;    // uma leitura a cada 0,5 s
 // ================================================
 
 WiFiClient wifi;
 PubSubClient mqtt(wifi);
-bool vazando = false;
-unsigned long ultimoEnvio = 0, ultimaTentativaMqtt = 0, ultimoSerial = 0;
+bool alertaAtivo = false;
+bool aquecido = false;
+unsigned long ultimoEnvio = 0, ultimaTentativaMqtt = 0;
 
 // Traduz o código de mqtt.state() para facilitar o diagnóstico.
 const char* explicarEstadoMqtt(int estado) {
@@ -402,7 +419,7 @@ const char* explicarEstadoMqtt(int estado) {
 void publicar(int leitura) {
   char payload[160];
   struct tm agora;
-  const char* status = vazando ? "VAZAMENTO" : "NORMAL";
+  const char* status = alertaAtivo ? "VAZAMENTO" : "NORMAL";
   if (getLocalTime(&agora, 0)) {             // tem hora do NTP: envia ts em UTC
     char ts[25];
     strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", &agora);
@@ -420,31 +437,57 @@ void publicar(int leitura) {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PINO_BUZZER, OUTPUT);
-  pinMode(PINO_LED, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  if (BUZZER_PIN >= 0) {
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+  analogReadResolution(12);                  // 0 a 4095
+
   Serial.printf("\nIniciando %s. Wi-Fi: %s. Broker: %s:%u\n", DISPOSITIVO, WIFI_SSID, MQTT_HOST, MQTT_PORTA);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_SENHA);
+  WiFi.begin(WIFI_SSID, WIFI_SENHA);         // conecta em segundo plano, durante o aquecimento
   configTime(0, 0, "pool.ntp.org");          // hora em UTC
   mqtt.setServer(MQTT_HOST, MQTT_PORTA);
+
+  // Sem delay(60000) aqui: o aquecimento é contado no loop, para o Wi-Fi e o MQTT
+  // já irem conectando enquanto o sensor estabiliza.
+  Serial.println("Aquecendo o sensor (60 s)...");
 }
 
 void loop() {
-  int leitura = analogRead(PINO_SENSOR);     // 0 a 4095
+  int leitura = analogRead(MQ5_PIN);
   bool aquecendo = millis() < AQUECIMENTO_MS;
-
-  // 1) Alarme local: decide e aciona SEMPRE, com ou sem rede.
-  bool agoraVazando = false;
-  if (!aquecendo) {
-    agoraVazando = vazando ? (leitura > LIMIAR - HISTERESE) : (leitura >= LIMIAR);
+  if (!aquecendo && !aquecido) {
+    aquecido = true;
+    Serial.println("Monitoramento iniciado.");
   }
-  bool mudou = (agoraVazando != vazando);
-  vazando = agoraVazando;
-  digitalWrite(PINO_LED, vazando);
-  digitalWrite(PINO_BUZZER, vazando);        // buzzer ativo; para buzzer passivo, use tone()/noTone()
 
-  // 2) Rede: tenta reconectar a cada 5 s, sem travar o loop com while.
+  // 1) Alarme local (mesma lógica do sketch testado): decide e aciona SEMPRE, com ou sem rede.
+  bool anterior = alertaAtivo;
+  if (aquecendo) {
+    alertaAtivo = false;
+  } else if (leitura > LIMITE) {
+    alertaAtivo = true;
+  } else if (leitura < LIMITE - MARGEM) {
+    alertaAtivo = false;
+  }
+  bool mudou = (alertaAtivo != anterior);
+  digitalWrite(LED_PIN, alertaAtivo ? HIGH : LOW);
+  if (BUZZER_PIN >= 0) {
+    digitalWrite(BUZZER_PIN, alertaAtivo ? HIGH : LOW);  // buzzer ativo; passivo: tone()/noTone()
+  }
+
+  // 2) Diagnóstico no Serial Monitor (115200 baud), no mesmo formato do sketch anterior.
+  Serial.printf("MQ-5: %d | %s | wifi=%s | mqtt=%s%s\n",
+                leitura, alertaAtivo ? "ALERTA" : "NORMAL",
+                WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
+                mqtt.connected() ? "ok" : "desconectado",
+                aquecendo ? " | aquecendo" : "");
+
+  // 3) Rede: tenta reconectar a cada 5 s, sem travar o loop com while.
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqtt.connected() && millis() - ultimaTentativaMqtt > 5000) {
       ultimaTentativaMqtt = millis();
@@ -458,29 +501,22 @@ void loop() {
     mqtt.loop();
   }
 
-  // 3) Publica periodicamente, e na hora se o status mudou.
+  // 4) Publica periodicamente, e na hora se o status mudou.
   if (!aquecendo && mqtt.connected() && (mudou || millis() - ultimoEnvio >= INTERVALO_ENVIO_MS)) {
     publicar(leitura);
     ultimoEnvio = millis();
   }
 
-  // 4) Diagnóstico no Serial Monitor (115200 baud).
-  if (millis() - ultimoSerial >= INTERVALO_SERIAL_MS) {
-    ultimoSerial = millis();
-    Serial.printf("leitura=%4d  status=%-9s  wifi=%s  mqtt=%s%s\n",
-                  leitura, vazando ? "VAZAMENTO" : "NORMAL",
-                  WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
-                  mqtt.connected() ? "ok" : "desconectado",
-                  aquecendo ? "  (aquecendo, alarme desativado)" : "");
-  }
-  delay(100);
+  delay(INTERVALO_LOOP_MS);
 }
 ```
 
 **Observações sobre o código**
 
-- **Buzzer passivo:** troque `digitalWrite(PINO_BUZZER, vazando);` por `if (vazando) tone(PINO_BUZZER, 2000); else noTone(PINO_BUZZER);`.
-- **Aquecimento:** no primeiro minuto depois de ligar, o alarme fica desativado e nada é publicado, porque a leitura de um sensor MQ frio vem alta e geraria falso alarme. O Serial mostra `(aquecendo, alarme desativado)` nesse período.
+- **O que mudou em relação ao sketch anterior:** o Wi-Fi, o MQTT e a função `publicar`. O aquecimento continua sendo de 60 s, mas agora é contado no `loop` em vez de um `delay(60000)` no `setup`, para a placa já ir conectando na rede. A lógica do LED (`> LIMITE` liga, `< LIMITE - MARGEM` desliga) é a mesma.
+- **Buzzer (quando houver):** troque `BUZZER_PIN = -1` pelo pino usado (ex.: `25`). Buzzer ativo: não precisa mudar mais nada. Buzzer passivo: troque a linha do `digitalWrite(BUZZER_PIN, ...)` por `if (alertaAtivo) tone(BUZZER_PIN, 2000); else noTone(BUZZER_PIN);`.
+- **Aquecimento:** no primeiro minuto depois de ligar, o alerta fica desativado e nada é publicado, porque a leitura de um MQ-5 frio vem alta e geraria falso alarme. O Serial mostra `| aquecendo` nesse período e `Monitoramento iniciado.` quando ele termina.
+- **`MARGEM` de 15:** é pequena (o LED apaga abaixo de 885). Se nos testes o status ficar alternando entre ALERTA e NORMAL perto do limite, aumente para `50`.
 - **`ts` (horário):** o ESP32 busca a hora na internet (NTP). Se a rede não tiver internet, o `ts` é omitido, o que o servidor aceita.
 - **Servidor inacessível:** cada tentativa de conexão MQTT pode travar o loop por alguns segundos. O alarme local continua funcionando, mas pode reagir com alguns segundos de atraso enquanto o servidor estiver fora.
 - **Um segundo ESP32:** use outro `DISPOSITIVO` e outro `TOPICO` (ex.: `esp32-area-servico` e `casa/area-servico/gas`). O servidor não precisa de mudança.
@@ -500,39 +536,58 @@ O esperado, nos primeiros segundos:
 
 ```
 Iniciando esp32-cozinha. Wi-Fi: NomeDaRede. Broker: 192.168.15.4:1883
-leitura=1890  status=NORMAL     wifi=desconectado  mqtt=desconectado  (aquecendo, alarme desativado)
-leitura=1702  status=NORMAL     wifi=192.168.15.23  mqtt=desconectado  (aquecendo, alarme desativado)
+Aquecendo o sensor (60 s)...
+MQ-5: 640 | NORMAL | wifi=desconectado | mqtt=desconectado | aquecendo
+MQ-5: 590 | NORMAL | wifi=192.168.15.23 | mqtt=desconectado | aquecendo
 MQTT: conectando em 192.168.15.4:1883...
 MQTT: conectado
-leitura=1450  status=NORMAL     wifi=192.168.15.23  mqtt=ok  (aquecendo, alarme desativado)
+MQ-5: 410 | NORMAL | wifi=192.168.15.23 | mqtt=ok | aquecendo
 ```
 
-Depois de 1 minuto, o `(aquecendo...)` some e aparecem as publicações:
+Depois de 1 minuto, aparece `Monitoramento iniciado.`, o `| aquecendo` some e começam as publicações (uma a cada ~2 s):
 
 ```
-leitura= 412  status=NORMAL     wifi=192.168.15.23  mqtt=ok
-  -> publicado: {"dispositivo":"esp32-cozinha","leitura":412,"status":"NORMAL","ts":"2026-11-07T14:22:07Z"}
+Monitoramento iniciado.
+MQ-5: 121 | NORMAL | wifi=192.168.15.23 | mqtt=ok
+  -> publicado: {"dispositivo":"esp32-cozinha","leitura":121,"status":"NORMAL","ts":"2026-11-07T14:22:07Z"}
+MQ-5: 118 | NORMAL | wifi=192.168.15.23 | mqtt=ok
 ```
+
+Os valores durante o aquecimento são só um exemplo. Em ar limpo, depois de aquecido, o esperado é algo perto de 112 a 128 (sem divisor de tensão).
 
 > **Mantenha a placa ligada no USB** durante todo o teste: ela é alimentada por ele, e o Serial Monitor é a principal ferramenta de diagnóstico.
 
 ---
 
-## 7. Calibrar o limiar
+## 7. Calibrar o limite
 
-O `LIMIAR` (600 no código) é só um ponto de partida: cada sensor dá valores diferentes.
+**Já foi feita uma calibração** com o sketch anterior e o isqueiro apagado:
+
+| Medição | Valor |
+|---|---|
+| Ar limpo | 112 a 128 |
+| Com gás | acima de 900 |
+| `LIMITE` | 900 |
+| `MARGEM` | 15 (o LED apaga abaixo de 885) |
+
+Esses valores já estão no firmware da seção 5. **Só refaça a calibração** se:
+- montar o divisor de tensão (seção 4), porque todas as leituras caem para cerca de 2/3;
+- trocar o sensor;
+- o alerta disparar sem gás, ou não disparar com gás.
+
+**Como refazer:**
 
 1. **Aqueça o sensor.** Deixe a placa ligada por pelo menos **5 minutos**. No primeiro uso de um sensor novo, a leitura só estabiliza de verdade depois de 24 a 48 horas ligado; para este teste, alguns minutos bastam, mas a leitura em ar limpo pode continuar caindo devagar.
-2. **Valor em ar limpo.** Com o ambiente ventilado, observe a `leitura=` no Serial Monitor por ~30 s e anote o **maior** valor. Exemplo: `350`.
-3. **Valor com gás.** ⚠️ Com o **isqueiro apagado**, aperte só o botão do gás, sem girar a pedra, a 2 ou 3 cm do sensor, por 2 a 3 segundos. Anote o **maior** valor. Exemplo: `1800`.
-4. **Escolha o limiar** num ponto entre os dois, mais perto do ar limpo, para detectar cedo. Uma regra simples:
+2. **Valor em ar limpo.** Com o ambiente ventilado, observe o `MQ-5:` no Serial Monitor por ~30 s e anote o **maior** valor.
+3. **Valor com gás.** ⚠️ Com o **isqueiro apagado**, aperte só o botão do gás, sem girar a pedra, a 2 ou 3 cm do sensor, por 2 a 3 segundos. Anote o **maior** valor.
+4. **Escolha o limite** num ponto entre os dois, abaixo do pico com gás, para o alerta disparar com folga. Uma regra simples:
    ```
-   LIMIAR = ar_limpo + (gas - ar_limpo) / 3
+   LIMITE = ar_limpo + (gas - ar_limpo) / 3
    ```
-   No exemplo: `350 + (1800 - 350) / 3 ≈ 830`.
-5. **Ajuste a histerese** para ~5% do limiar (ex.: `40`). Se no teste o status ficar alternando entre NORMAL e VAZAMENTO, aumente.
-6. Altere `LIMIAR` e `HISTERESE` no código e grave de novo (seção 6).
-7. **Anote os valores:** ar limpo, gás, `LIMIAR` e `HISTERESE` (entram no relatório da seção 10).
+   Exemplo com divisor: ar limpo `85`, gás `1500` → `85 + (1500 - 85) / 3 ≈ 555`.
+5. **Ajuste a margem.** Se no teste o status ficar alternando entre ALERTA e NORMAL, aumente (ex.: `50`).
+6. Altere `LIMITE` e `MARGEM` no código e grave de novo (seção 6).
+7. **Anote os valores:** ar limpo, gás, `LIMITE` e `MARGEM` (entram no relatório da seção 10).
 
 > ⚠️ **Segurança:** nunca acenda o isqueiro perto do circuito. Use pouco gás, em ambiente ventilado, e espere o cheiro sumir entre os testes.
 
@@ -576,35 +631,37 @@ Faça na ordem. Cada teste diz **o que fazer**, **onde olhar** e **o que é espe
 - `"acao":"invalido"` no Terminal 2: o campo `erro` diz o que está fora do padrão (o firmware foi alterado?).
 - Nada no Terminal 2, mas o Serial mostra `publicado`: o ESP32 está publicando em outro broker. Confira o `MQTT_HOST` e, no PC do servidor, se o Mosquitto do Windows está parado (A.2/B.4).
 
-### Teste 3: calibração
+### Teste 3: conferir a calibração
 
-Siga a [seção 7](#7-calibrar-o-limiar). Depois de gravar o limiar novo, repita rapidamente os testes 1 e 2.
+**Fazer:** com o sensor aquecido, observar o `MQ-5:` no Serial por ~30 s em ar limpo.
+
+**Esperado:** valores perto de 112 a 128 (sem divisor) e `NORMAL`. Se estiverem bem diferentes, ou se o divisor tiver sido montado, refaça a calibração ([seção 7](#7-calibrar-o-limite)) e repita rapidamente os testes 1 e 2.
 
 ### Teste 4: detecção de vazamento
 
 **Fazer:** com o **isqueiro apagado**, soltar gás perto do sensor por 2 a 3 segundos.
 
 **Esperado:**
-- **Na placa:** o **buzzer apita e o LED acende na hora**, assim que a leitura passa do limiar.
-- **Serial:** `status=VAZAMENTO` e uma publicação imediata com `"status":"VAZAMENTO"`.
+- **Na placa:** o **LED acende na hora**, assim que a leitura passa de 900 (`LIMITE`).
+- **Serial:** `| ALERTA` e uma publicação imediata com `"status":"VAZAMENTO"`.
 - **Terminal 2:** uma linha `"acao":"alerta_disparado"` com `"tipo":"INICIO_VAZAMENTO"`, seguida de uma linha `"acao":"notificacao_log"` com o texto `🚨 VAZAMENTO DE GÁS detectado em cozinha!`.
 - **<http://localhost:8000/eventos>:** um evento novo `INICIO_VAZAMENTO` com `"notificado": true` e `"erro_notificacao": null`.
 - Enquanto o gás continuar, as leituras seguem sendo gravadas, mas **não** aparecem novos `INICIO_VAZAMENTO` (anti-spam).
 
 **Se falhar:**
-- O alarme não toca: a leitura não passou do `LIMIAR`. Confira o Serial e recalibre. Confira também a ligação do buzzer e do LED.
-- O alarme toca, mas não aparece evento: veja o teste 2.
+- O LED não acende: veja no Serial se a leitura passou de 900. Se passou e o Serial mostra `ALERTA`, confira a ligação do LED (GPIO 23, resistor, posição das pernas). Se não passou, aproxime mais o gás ou recalibre (seção 7).
+- O LED acende, mas não aparece evento: veja o teste 2.
 
 ### Teste 5: normalização
 
 **Fazer:** afastar o isqueiro e ventilar (abanar ou esperar). O sensor pode levar de 30 s a alguns minutos para voltar.
 
 **Esperado:**
-- **Na placa:** o buzzer e o LED **desligam** quando a leitura cai abaixo de `LIMIAR - HISTERESE`.
+- **Na placa:** o LED **apaga** quando a leitura cai abaixo de 885 (`LIMITE - MARGEM`). O Serial volta a mostrar `| NORMAL`.
 - **Terminal 2:** `"tipo":"NORMALIZADO"` e `notificacao_log` com `✅ Nível de gás normalizado em cozinha.`.
 - **/eventos:** um evento `NORMALIZADO`.
 
-**Se falhar:** se aparecerem vários `INICIO_VAZAMENTO` e `NORMALIZADO` seguidos, a leitura está oscilando perto do limiar. Aumente a `HISTERESE` e grave de novo.
+**Se falhar:** se aparecerem vários `INICIO_VAZAMENTO` e `NORMALIZADO` seguidos, a leitura está oscilando perto do limite. Aumente a `MARGEM` (ex.: de 15 para 50) e grave de novo.
 
 ### Teste 6 (opcional): lembrete de vazamento contínuo
 
@@ -625,7 +682,7 @@ Mostra que o alarme local não depende do servidor e que nada se perde quando a 
 1. Provoque um vazamento (teste 4) e espere o `INICIO_VAZAMENTO` aparecer em `/eventos`.
 2. No PC do servidor: `docker compose stop api`.
 3. Continue soltando gás por ~20 s.
-   - **Esperado:** o **alarme continua tocando**. O Serial continua mostrando `mqtt=ok` e `publicado`, porque o broker continua no ar e guarda as mensagens.
+   - **Esperado:** o **LED continua aceso**. O Serial continua mostrando `mqtt=ok` e `publicado`, porque o broker continua no ar e guarda as mensagens.
 4. `docker compose start api` e espere ~20 s.
 5. **Esperado:**
    - em `/leituras?dispositivo=esp32-cozinha&limite=50`, as leituras do período em que a API ficou fora aparecem, com `recebido_em` todos próximos do momento em que ela voltou;
@@ -664,9 +721,10 @@ Mostra que o alarme local não depende do servidor e que nada se perde quando a 
 | Gravação para em `Connecting....____` | a placa não entrou em modo de gravação | segure o botão **BOOT** durante o `Connecting` |
 | Serial Monitor mostra caracteres estranhos | velocidade errada | ajuste para **115200 baud** |
 | Leitura sempre `0` | AO desligado ou divisor errado | confira as ligações do sensor e do divisor |
-| Leitura sempre `4095` | AO ligado direto ou divisor invertido | **desligue o USB** e confira o divisor (10 kΩ do lado do sensor, 20 kΩ para o GND) |
+| Leitura chega a `4095` com gás | a tensão no pino chegou ao limite; provavelmente não há divisor, ou ele está invertido | **desligue o USB** e confira o divisor (seção 4: 10 kΩ do lado do sensor, 20 kΩ para o GND) |
 | Leitura alta logo ao ligar | sensor aquecendo | é normal; espere alguns minutos |
-| Alarme não desliga | o `LIMIAR - HISTERESE` está abaixo da leitura em ar limpo | recalibre (seção 7) |
+| LED não apaga | a leitura em ar limpo não voltou abaixo de `LIMITE - MARGEM` | ventile e espere; se continuar, recalibre (seção 7) |
+| Com o divisor montado, o LED não acende mais com gás | as leituras caíram para ~2/3 e não passam mais de 900 | recalibre (seção 7) |
 | `estado -2` no Serial | o ESP32 não alcança o PC do servidor | IP, rede Privada, firewall, mesma rede, rede de visitante (use o hotspot) |
 | `not authorised` no log do mosquitto | senha MQTT diferente | a `MQTT_SENHA` do firmware deve ser igual à `MQTT_PASSWORD` do `.env` |
 | `docker compose up` falha com "port is already allocated" | Mosquitto do Windows ligado | `Stop-Service mosquitto` como administrador (A.2) |
@@ -688,8 +746,8 @@ Para ver o motivo de qualquer erro da API: `docker compose logs --tail 50 api`. 
 |---|---|---|---|
 | 1 | Conexão ao broker | ☐ | |
 | 2 | Leituras gravadas | ☐ | |
-| 3 | Calibração | ☐ | |
-| 4 | Detecção de vazamento (alarme local + `INICIO_VAZAMENTO`) | ☐ | |
+| 3 | Conferência da calibração | ☐ | |
+| 4 | Detecção de vazamento (LED + `INICIO_VAZAMENTO`) | ☐ | |
 | 5 | Normalização (`NORMALIZADO`) | ☐ | |
 | 6 | Lembrete (opcional) | ☐ | |
 | 7 | API fora durante vazamento | ☐ | |
@@ -697,18 +755,19 @@ Para ver o motivo de qualquer erro da API: `docker compose logs --tail 50 api`. 
 | 8b | Wi-Fi fora | ☐ | |
 | 9 | Reinício da placa | ☐ | |
 
-**Valores da calibração**
-- Leitura em ar limpo: ____
-- Leitura com gás: ____
-- `LIMIAR`: ____ e `HISTERESE`: ____
-- Modelo do sensor (MQ-2 ou MQ-5): ____
+**Montagem e calibração** (já preenchido com a calibração anterior; corrija se mudou)
+- Sensor: MQ-5 no GPIO 34; LED no GPIO 23; buzzer: não há
+- Divisor de tensão: ☐ sim ☐ não ☐ não sei
+- Leitura em ar limpo: 112 a 128
+- Leitura com gás (pico): ____
+- `LIMITE`: 900 e `MARGEM`: 15
 
 **Evidências**
-- [ ] print do Serial Monitor mostrando `MQTT: conectado` e algumas publicações;
+- [ ] print do Serial Monitor mostrando `MQTT: conectado`, algumas publicações e uma linha com `ALERTA`;
 - [ ] print de <http://localhost:8000/eventos> com `INICIO_VAZAMENTO` e `NORMALIZADO`;
 - [ ] print de <http://localhost:8000/leituras/ultimas>;
 - [ ] trecho do log da API com `alerta_disparado` e `notificacao_log` (`docker compose logs api | Select-String "alerta_disparado|notificacao_log"`);
-- [ ] foto da montagem, mostrando o divisor de tensão;
+- [ ] foto da montagem, mostrando por onde passa o fio do AO do sensor (para confirmar o divisor de tensão);
 - [ ] o código do firmware usado, **sem** a senha do Wi-Fi e a senha MQTT;
 - [ ] qualquer erro encontrado, com o trecho do log.
 
